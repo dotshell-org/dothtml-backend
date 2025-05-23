@@ -6,6 +6,8 @@ import { body, validationResult } from 'express-validator';
 import dotenv from 'dotenv';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import { apiKeyAuthMiddleware } from './apiKeyAuth';
+import CryptoJS from 'crypto-js';
 
 // Load environment variables
 dotenv.config();
@@ -40,6 +42,10 @@ app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
 }));
+// Middleware API key sauf /contact
+app.use(apiKeyAuthMiddleware());
+
+const AES_KEY = process.env.AES_KEY || 'default_key_32_bytes_minimum';
 
 // Contact form endpoint
 app.post('/contact', [
@@ -57,9 +63,16 @@ app.post('/contact', [
 
   const { name, email, country, phone, company, message } = req.body;
   try {
+    // Chiffrement AES
+    const encryptedName = CryptoJS.AES.encrypt(name, AES_KEY).toString();
+    const encryptedEmail = CryptoJS.AES.encrypt(email, AES_KEY).toString();
+    const encryptedCountry = CryptoJS.AES.encrypt(country, AES_KEY).toString();
+    const encryptedPhone = phone ? CryptoJS.AES.encrypt(phone, AES_KEY).toString() : null;
+    const encryptedCompany = company ? CryptoJS.AES.encrypt(company, AES_KEY).toString() : null;
+    const encryptedMessage = CryptoJS.AES.encrypt(message, AES_KEY).toString();
     await db.run(
       `INSERT INTO messages (name, email, country, phone, company, message) VALUES (?, ?, ?, ?, ?, ?)`,
-      [name, email, country, phone || null, company || null, message]
+      [encryptedName, encryptedEmail, encryptedCountry, encryptedPhone, encryptedCompany, encryptedMessage]
     );
     res.status(200).json({ message: 'Contact form submitted and saved successfully.' });
   } catch (err) {
@@ -71,7 +84,17 @@ app.post('/contact', [
 app.get('/messages', async (req, res) => {
   try {
     const messages = await db.all('SELECT * FROM messages ORDER BY created_at DESC');
-    res.status(200).json(messages);
+    // Déchiffrement AES
+    const decryptedMessages = messages.map((msg: any) => ({
+      ...msg,
+      name: CryptoJS.AES.decrypt(msg.name, AES_KEY).toString(CryptoJS.enc.Utf8),
+      email: CryptoJS.AES.decrypt(msg.email, AES_KEY).toString(CryptoJS.enc.Utf8),
+      country: CryptoJS.AES.decrypt(msg.country, AES_KEY).toString(CryptoJS.enc.Utf8),
+      phone: msg.phone ? CryptoJS.AES.decrypt(msg.phone, AES_KEY).toString(CryptoJS.enc.Utf8) : null,
+      company: msg.company ? CryptoJS.AES.decrypt(msg.company, AES_KEY).toString(CryptoJS.enc.Utf8) : null,
+      message: CryptoJS.AES.decrypt(msg.message, AES_KEY).toString(CryptoJS.enc.Utf8),
+    }));
+    res.status(200).json(decryptedMessages);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch messages.' });
   }
