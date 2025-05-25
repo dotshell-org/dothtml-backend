@@ -23,6 +23,7 @@
   "homepage": "https://github.com/dotshell-org/dothtml-backend#readme",
   "dependencies": {
     "@types/express-validator": "^3.0.0",
+    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.5.0",
