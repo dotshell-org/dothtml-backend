@@ -15,3 +15,6 @@ Cargo.lock
 
 # Jetbrains IDE files
 .idea/
+
+# Environment files
+.env
