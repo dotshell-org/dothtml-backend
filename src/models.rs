@@ -251,4 +251,28 @@ impl Database {
         Ok(messages)
     }
 
+    pub async fn get_message_by_id(&self, id: Uuid) -> Result<Message, sqlx::Error> {
+        let row = sqlx::query(r#"
+            SELECT id, name, email, country_region, phone_number, company, message, created_at, assigned_to, status
+            FROM messages
+            WHERE id = $1
+        "#)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(Message {
+            id: row.get("id"),
+            name: row.get("name"),
+            email: row.get("email"),
+            country_region: row.get("country_region"),
+            phone_number: row.get("phone_number"),
+            company: row.get("company"),
+            message: row.get("message"),
+            created_at: row.get("created_at"),
+            assigned_to: row.get("assigned_to"),
+            status: row.get("status"),
+        })
+    }
+
 }

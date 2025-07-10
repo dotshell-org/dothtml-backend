@@ -75,15 +75,16 @@ pub use crate::handlers::*;
 /// ```
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg
-        // ========================= Website API =========================
-        // Routes for public-facing website functionality
+        // ========================= Website API ========================= //
         .route("/contact", web::post().to(contact))
         
-        // ======================== Backoffice API =======================
-        // Routes for internal management and administration
+        // ======================== Backoffice API ======================= //
         .route("/inbox/pending", web::get().to(pending))
+        .route("/inbox/{id}", web::get().to(get_message_by_id))
+
         .route("/inbox/{id}/assign", web::post().to(assign))
         .route("/inbox/{id}/release", web::post().to(release))
         .route("/inbox/{id}/reply", web::post().to(reply))
+
         .route("/inbox/{id}", web::delete().to(delete));
 }

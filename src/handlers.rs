@@ -143,6 +143,14 @@ pub async fn pending(db: web::Data<Database>) -> impl Responder {
     }
 }
 
+pub async fn get_message_by_id(path: web::Path<String>, db: web::Data<Database>) -> impl Responder {
+    let id = path.into_inner();
+    match db.get_message_by_id((&id).parse().unwrap()).await {
+        Ok(message) => HttpResponse::Ok().json(message),
+        Err(_) => HttpResponse::NotFound().body("Message not found")
+    }
+}
+
 pub async fn assign(path: web::Path<String>) -> impl Responder {
     let id = path.into_inner();
     HttpResponse::Ok().body(format!("assign message {}", id))
