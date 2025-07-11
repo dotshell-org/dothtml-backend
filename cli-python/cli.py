@@ -44,7 +44,7 @@ def list_accounts():
     sql_query = """
         SELECT
             a.id as uuid, a.identifier,
-            COALESCE(COUNT(pk.id), 0) as key_count
+            COALESCE(COUNT(pk.id), 0) as key
         FROM accounts a
         LEFT JOIN public_keys pk ON a.identifier = pk.identifier
         GROUP BY a.id, a.identifier
@@ -77,9 +77,9 @@ def list_accounts():
                 row_values = list(row)
                 key_count = int(row_values[-1])
                 if key_count == 0:
-                    row_values[-1] = "[red]NO KEY[/red]"
+                    row_values[-1] = "[red]NOT CONNECTED[/red]"
                 else:
-                    row_values[-1] = f"[green]{key_count}[/green]"
+                    row_values[-1] = f"[green]CONNECTED[/green]"
                 table.add_row(*[str(val) for val in row_values])
 
             console.print("\n")
@@ -222,51 +222,15 @@ def add_account(identifier: str):
 
 @app.command("remove")
 def remove_item(
-    what: str = typer.Argument(..., help="What to remove ('key' or 'account')"),
+    what: str = typer.Argument(..., help="What to remove ('account')"),
     uuid: str = typer.Argument(..., help="UUID of the item to remove")
 ):
     """Remove items from the system"""
-    if what == "key":
-        remove_key(uuid)
-    elif what == "account":
+    if what == "account":
         remove_account(uuid)
     else:
-        console.print("[red]Error: Only 'key' and 'account' removal are supported[/]", style="bold red")
+        console.print("[red]Error: Only 'account' removal is supported[/]", style="bold red")
         raise typer.Exit(1)
-
-def remove_key(uuid: str):
-    """Remove a public key by its UUID"""
-    import psycopg2
-
-    database_url = os.getenv('DATABASE_URL')
-    if not database_url:
-        console.print("[red]Error: DATABASE_URL not found in .env file[/]", style="bold red")
-        raise typer.Exit(1)
-
-    conn = None
-    cur = None
-    try:
-        conn = psycopg2.connect(database_url)
-        cur = conn.cursor()
-        cur.execute("DELETE FROM public_keys WHERE id = %s RETURNING id", (uuid,))
-        deleted_id = cur.fetchone()
-        conn.commit()
-
-        if deleted_id:
-            console.print(f"[green]Key with UUID '{uuid}' removed successfully[/green]")
-        else:
-            console.print(f"[yellow]No key found with UUID '{uuid}'[/yellow]")
-
-    except psycopg2.Error as e:
-        if conn:
-            conn.rollback()
-        console.print(f"[red]Database error:[/red] {e}", style="bold red")
-        raise typer.Exit(1)
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 def remove_account(uuid: str):
     """Remove an account and all associated keys by account UUID"""
@@ -311,6 +275,54 @@ def remove_account(uuid: str):
             # This case should ideally not happen if account_data was found, but good for robustness
             console.print(f"[red]Failed to remove account with UUID '{uuid}'. Rolling back[/red]")
             conn.rollback()
+
+    except psycopg2.Error as e:
+        if conn:
+            conn.rollback()
+        console.print(f"[red]Database error:[/red] {e}", style="bold red")
+        raise typer.Exit(1)
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+@app.command("disconnect")
+def disconnect(uuid: str = typer.Argument(..., help="UUID of the account to disconnect public key")):
+    """Remove the connected public_key from the account with given UUID"""
+    import psycopg2
+
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        console.print("[red]Error: DATABASE_URL not found in .env file[/]", style="bold red")
+        raise typer.Exit(1)
+
+    conn = None
+    cur = None
+    try:
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor()
+
+        # Get the identifier of the account by UUID
+        cur.execute("SELECT identifier FROM accounts WHERE id = %s", (uuid,))
+        account_data = cur.fetchone()
+
+        if not account_data:
+            console.print(f"[yellow]No account found with UUID '{uuid}'[/yellow]")
+            raise typer.Exit(1)
+
+        identifier = account_data[0]
+
+        # Delete the public_key linked to this identifier
+        cur.execute("DELETE FROM public_keys WHERE identifier = %s RETURNING id", (identifier,))
+        deleted_keys = cur.fetchall()
+        conn.commit()
+
+        if deleted_keys:
+            count = len(deleted_keys)
+            console.print(f"[green]{count} public key(s) disconnected from account '{uuid}' successfully[/green]")
+        else:
+            console.print(f"[yellow]No public key connected to account '{uuid}'[/yellow]")
 
     except psycopg2.Error as e:
         if conn:
