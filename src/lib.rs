@@ -44,3 +44,4 @@ pub mod routes;
 
 /// HTTP request handlers
 pub mod handlers;
+mod auth;

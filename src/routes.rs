@@ -28,8 +28,8 @@
 //! ```
 
 use actix_web::web;
-
 pub use crate::handlers::*;
+pub use crate::auth::*;
 
 /// Configures all HTTP routes for the application.
 /// 
@@ -75,10 +75,15 @@ pub use crate::handlers::*;
 /// ```
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg
-        // ========================= Website API ========================= //
+        // ============================= Website API ============================= //
         .route("/contact", web::post().to(contact))
-        
-        // ======================== Backoffice API ======================= //
+
+        // ========================= Backoffice Auth API ========================= //
+        .route("/auth/register", web::post().to(register))
+        .route("/auth/login", web::post().to(login))
+        .route("/auth/authenticate", web::post().to(authenticate))
+
+        // ========================= Backoffice Inbox API ======================== //
         .route("/inbox/pending", web::get().to(pending))
         .route("/inbox/{id}", web::get().to(get_message_by_id));
 }
