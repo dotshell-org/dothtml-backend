@@ -1,12 +1,15 @@
 use actix_web::{web, HttpResponse, Responder};
+use base64::{engine::general_purpose, Engine as _};
+use rand::Rng;
 use serde::Deserialize;
+use serde_json::json;
+use sqlx::Error;
 use crate::database::Database;
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
     identifier: String,
     public_key: String,
-    device_name: String,
 }
 
 #[derive(Deserialize)]
@@ -43,21 +46,16 @@ pub async fn register(
 ) -> impl Responder {
     let identifier = request.identifier.clone();
     let public_key = request.public_key.clone();
-    let device_name = request.device_name.clone();
 
     match db.contains_identifier(&identifier).await {
         Ok(true) => {
             match db.is_identifier_registered(&identifier).await {
                 Ok(true) => {
-                    // If the identifier is already linked, send a confirmation message
-                    HttpResponse::Accepted().body(format!(
-                        // TODO: Implement WebSocket message sending
-                        "[FAKE] Identifier {} is already registered. A confirmation message has been sent to all devices associated with this identifier.",
-                        identifier
-                    ))
+                    // If the identifier is already linked, send an error response
+                    HttpResponse::Conflict().body("Identifier is already registered with a public key.")
                 },
                 Ok(false) => {
-                    db.link_public_key(&identifier, &public_key, &device_name).await.unwrap();
+                    db.link_public_key(&identifier, &public_key).await.unwrap();
                     HttpResponse::Ok().body("New public key registered successfully.")
                 },
                 Err(_) => {
@@ -85,9 +83,30 @@ pub async fn register(
 ///
 /// Otherwise, the server will return an error message.
 ///
-pub async fn login(request: web::Json<LoginRequest>) -> impl Responder {
-    let message = format!("[FAKE] {}, here is your challenge : ...", request.identifier);
-    HttpResponse::Ok().body(message)
+pub async fn login(
+    request: web::Json<LoginRequest>,
+    db: web::Data<Database>
+) -> impl Responder {
+    let identifier = request.identifier.clone();
+
+    match db.get_public_key(&identifier).await {
+        Ok(_public_key) => {
+            // Generate a random challenge
+            let mut rng = rand::thread_rng();
+            let challenge_bytes: [u8; 32] = rng.gen();
+            let challenge = general_purpose::STANDARD.encode(challenge_bytes);
+
+            db.store_challenge_for_user(&identifier, &challenge).await.unwrap();
+
+            HttpResponse::Ok().json(json!({ "challenge": challenge }))
+        }
+        Err(Error::RowNotFound) => {
+            HttpResponse::NotFound().body("Identifier not found.")
+        }
+        Err(_) => {
+            HttpResponse::InternalServerError().body("Database error occurred")
+        }
+    }
 }
 
 /// # Authentication consists of sending an identifier and a signed challenge.
@@ -104,7 +123,24 @@ pub async fn login(request: web::Json<LoginRequest>) -> impl Responder {
 /// stored in the database. If the verification is successful, the server generates a JWT
 /// with a secret key and returns it to the client. Otherwise, it returns an error 401 Unauthorized.
 ///
-pub async fn authenticate(request: web::Json<AuthenticateRequest>) -> impl Responder {
-    let message = format!("[FAKE] {}, your challenge '{}' is correctly signed", request.identifier, request.signed_challenge);
-    HttpResponse::Ok().body(message)
+pub async fn authenticate(
+    request: web::Json<AuthenticateRequest>,
+    db: web::Data<Database>
+) -> impl Responder {
+    let identifier = request.identifier.clone();
+    let signed_challenge = request.signed_challenge.clone();
+
+    // Retrieve the public key from the database
+    match db.get_public_key(&identifier).await {
+        Ok(public_key) => {
+            // Verify the signed challenge with the public key
+            HttpResponse::Ok().body("[FAKE] Authentication successful.")
+        }
+        Err(Error::RowNotFound) => {
+            HttpResponse::NotFound().body("Identifier not found.")
+        }
+        Err(_) => {
+            HttpResponse::InternalServerError().body("Database error occurred")
+        }
+    }
 }

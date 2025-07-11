@@ -46,6 +46,7 @@ async fn main() -> std::io::Result<()> {
         db.create_messages_table().await,
         db.create_accounts_table().await,
         db.create_public_keys_table().await,
+        db.create_challenges_table().await,
     ];
     for f in create_table_functions {
         if let Err(e) = f {

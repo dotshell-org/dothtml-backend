@@ -111,9 +111,25 @@ impl Database {
         sqlx::query(r#"
             CREATE TABLE public_keys (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                identifier TEXT NOT NULL UNIQUE,
+                public_key TEXT NOT NULL
+            );
+        "#)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn create_challenges_table(&self) -> Result<(), sqlx::Error> {
+        sqlx::query(r#"
+            CREATE TABLE challenges (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 identifier TEXT NOT NULL,
-                public_key TEXT NOT NULL,
-                device_name TEXT
+                challenge TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                CONSTRAINT expires_valid CHECK (expires_at > created_at)
             );
         "#)
         .execute(&self.pool)
@@ -208,7 +224,7 @@ impl Database {
 
         Ok(row.get::<bool, _>(0))
     }
-    
+
     pub async fn is_identifier_registered(&self, identifier: &str) -> Result<bool, sqlx::Error> {
         let row = sqlx::query(r#"
             SELECT EXISTS (
@@ -222,16 +238,49 @@ impl Database {
         Ok(row.get::<bool, _>(0))
     }
 
-    pub async fn link_public_key(&self, identifier: &str, public_key: &str, device_name: &str) -> Result<(), sqlx::Error> {
+    pub async fn link_public_key(&self, identifier: &str, public_key: &str) -> Result<(), sqlx::Error> {
         sqlx::query(r#"
-            INSERT INTO public_keys (identifier, public_key, device_name)
-            VALUES ($1, $2, $3)
+            INSERT INTO public_keys (identifier, public_key)
+            VALUES ($1, $2)
         "#)
         .bind(identifier)
         .bind(public_key)
-        .bind(device_name)
         .execute(&self.pool)
         .await?;
+
+        Ok(())
+    }
+    
+    pub async fn get_public_key(&self, identifier: &str) -> Result<String, sqlx::Error> {
+        let row = sqlx::query(r#"
+            SELECT public_key FROM public_keys WHERE identifier = $1
+        "#)
+        .bind(identifier)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.get("public_key"))
+    }
+    
+    pub async fn store_challenge_for_user(
+        &self, identifier: &str, challenge: &str
+    ) -> Result<(), sqlx::Error> {
+        // First, delete any existing challenge for the identifier
+        sqlx::query(r#"
+            DELETE FROM challenges WHERE identifier = $1;
+        "#)
+            .bind(identifier)
+            .execute(&self.pool)
+            .await?;
+        // Then, insert the new challenge
+        sqlx::query(r#"
+            INSERT INTO challenges (identifier, challenge, created_at, expires_at)
+            VALUES ($1, $2, NOW(), NOW() + interval '1 day');
+        "#)
+            .bind(identifier)
+            .bind(challenge)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
