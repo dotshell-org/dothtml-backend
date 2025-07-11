@@ -1,0 +1,4 @@
+#!/bin/bash
+# A script to invoke cli.py located in cli-python
+
+python3 cli-python/cli.py "$@"
