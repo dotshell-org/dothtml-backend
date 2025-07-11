@@ -92,8 +92,8 @@ pub async fn login(
     match db.get_public_key(&identifier).await {
         Ok(_public_key) => {
             // Generate a random challenge
-            let mut rng = rand::thread_rng();
-            let challenge_bytes: [u8; 32] = rng.gen();
+            let mut rng = rand::rng();
+            let challenge_bytes: [u8; 32] = rng.random();
             let challenge = general_purpose::STANDARD.encode(challenge_bytes);
 
             db.store_challenge_for_user(&identifier, &challenge).await.unwrap();
@@ -132,7 +132,7 @@ pub async fn authenticate(
 
     // Retrieve the public key from the database
     match db.get_public_key(&identifier).await {
-        Ok(public_key) => {
+        Ok(_public_key) => {
             // Verify the signed challenge with the public key
             HttpResponse::Ok().body("[FAKE] Authentication successful.")
         }

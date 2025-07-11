@@ -333,7 +333,7 @@ impl Database {
 
         // Random shuffle of results
         use rand::seq::SliceRandom;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         rows.shuffle(&mut rng);
 
         let messages = rows.into_iter().map(|row| PendingMessage {
