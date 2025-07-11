@@ -36,19 +36,25 @@ use database::Database;
 async fn main() -> std::io::Result<()> {
     // Initialize database connection
     let db = Database::new().await
-        .expect("Failed to connect to database");
+        .expect("Failed to connect to the database");
     
     // Test database connectivity
     db.test_connection().await
         .expect("Database connection test failed");
-    
-    // Try to create messages table, ignore if it already exists
-    if let Err(e) = db.create_messages_table().await {
-        match e {
-            sqlx::Error::Database(ref err) if err.code().as_deref() == Some("42P07") => {
-                println!("Messages table already exists, continuing...");
+
+    let create_table_functions = [
+        db.create_messages_table().await,
+        db.create_accounts_table().await,
+        db.create_public_keys_table().await,
+    ];
+    for f in create_table_functions {
+        if let Err(e) = f {
+            match e {
+                sqlx::Error::Database(ref err) if err.code().as_deref() == Some("42P07") => {
+                    println!("Table already exists, continuing...");
+                }
+                _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
             }
-            _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
         }
     }
 

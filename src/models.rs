@@ -69,37 +69,9 @@ pub struct PendingMessage {
 /// for the Message model, including table creation, insertion, retrieval,
 /// updates, and deletion operations.
 impl Database {
-    /// Creates the 'messages' table if it doesn't exist.
-    /// 
-    /// This method sets up the database schema for storing messages.
-    /// It creates a table with all necessary columns and constraints,
-    /// including UUID primary key generation and timestamp defaults.
-    /// 
-    /// # Returns
-    /// 
-    /// Returns `Ok(())` if the table is created successfully or already exists,
-    /// or a `sqlx::Error` if the operation fails.
-    /// 
-    /// # Errors
-    /// 
-    /// This function returns an error if:
-    /// - Database connection issues occur
-    /// - Insufficient permissions for table creation
-    /// - SQL syntax errors in the CREATE TABLE statement
-    /// 
-    /// # Examples
-    /// 
-    /// ```rust
-    /// use dothtml_backend::database::Database;
-    /// 
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), sqlx::Error> {
-    ///     let db = Database::new().await?;
-    ///     db.create_messages_table().await?;
-    ///     println!("Messages table ready!");
-    ///     Ok(())
-    /// }
-    /// ```
+
+    // =================== Table Creation =================== //
+
     pub async fn create_messages_table(&self) -> Result<(), sqlx::Error> {
         sqlx::query(r#"
             CREATE TABLE messages (
@@ -121,6 +93,36 @@ impl Database {
         
         Ok(())
     }
+
+    pub async fn create_accounts_table(&self) -> Result<(), sqlx::Error> {
+        sqlx::query(r#"
+            CREATE TABLE accounts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                identifier TEXT NOT NULL UNIQUE
+            );
+        "#)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn create_public_keys_table(&self) -> Result<(), sqlx::Error> {
+        sqlx::query(r#"
+            CREATE TABLE public_keys (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                identifier TEXT NOT NULL,
+                public_key TEXT NOT NULL,
+                device_name TEXT
+            );
+        "#)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    // =================== Website API =================== //
     
     /// Inserts a new message into the database.
     /// 
@@ -191,6 +193,50 @@ impl Database {
             message: row.get("message")
         })
     }
+
+    // =================== Backoffice Auth API =================== //
+
+    pub async fn contains_identifier(&self, identifier: &str) -> Result<bool, sqlx::Error> {
+        let row = sqlx::query(r#"
+            SELECT EXISTS (
+                SELECT 1 FROM accounts WHERE identifier = $1
+            )
+        "#)
+        .bind(identifier)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.get::<bool, _>(0))
+    }
+    
+    pub async fn is_identifier_registered(&self, identifier: &str) -> Result<bool, sqlx::Error> {
+        let row = sqlx::query(r#"
+            SELECT EXISTS (
+                SELECT 1 FROM public_keys WHERE identifier = $1
+            )
+        "#)
+        .bind(identifier)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.get::<bool, _>(0))
+    }
+
+    pub async fn link_public_key(&self, identifier: &str, public_key: &str, device_name: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(r#"
+            INSERT INTO public_keys (identifier, public_key, device_name)
+            VALUES ($1, $2, $3)
+        "#)
+        .bind(identifier)
+        .bind(public_key)
+        .bind(device_name)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    // =================== Backoffice Inbox API =================== //
     
     /// Retrieves 20 pending messages from the database.
     /// 
@@ -251,6 +297,45 @@ impl Database {
         Ok(messages)
     }
 
+    /// Retrieves a message by its unique identifier from the database.
+    ///
+    /// This asynchronous function queries the `messages` table in the database
+    /// to fetch a single row where the `id` column matches the provided UUID.
+    /// The row is then mapped into a `Message` struct and returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - A UUID representing the unique identifier of the message to be retrieved.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Message, sqlx::Error>` - On success, returns an instance of the `Message` struct
+    ///   populated with the data fetched from the database. On failure, returns a `sqlx::Error`
+    ///   indicating the reason for failure.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The database query fails.
+    /// * The provided `id` does not correspond to any row in the `messages` table.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use uuid::Uuid;
+    ///
+    /// let message_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+    /// let message = service.get_message_by_id(message_id).await;
+    ///
+    /// match message {
+    ///     Ok(msg) => println!("Message retrieved: {:?}", msg),
+    ///     Err(err) => eprintln!("Failed to retrieve message: {:?}", err),
+    /// }
+    /// ```
+    ///
+    /// # Note
+    /// Ensure the database connection pool is properly initialized and accessible
+    /// through `self.pool` before calling this function.
     pub async fn get_message_by_id(&self, id: Uuid) -> Result<Message, sqlx::Error> {
         let row = sqlx::query(r#"
             SELECT id, name, email, country_region, phone_number, company, message, created_at, assigned_to, status
