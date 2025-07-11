@@ -150,20 +150,3 @@ pub async fn get_message_by_id(path: web::Path<String>, db: web::Data<Database>)
         Err(_) => HttpResponse::NotFound().body("Message not found")
     }
 }
-
-pub async fn assign(path: web::Path<String>) -> impl Responder {
-    let id = path.into_inner();
-    HttpResponse::Ok().body(format!("assign message {}", id))
-}
-pub async fn release(path: web::Path<String>) -> impl Responder {
-    let id = path.into_inner();
-    HttpResponse::Ok().body(format!("release message {}", id))
-}
-pub async fn reply(path: web::Path<String>) -> impl Responder {
-    let id = path.into_inner();
-    HttpResponse::Ok().body(format!("reply to message {}", id))
-}
-pub async fn delete(path: web::Path<String>) -> impl Responder {
-    let id = path.into_inner();
-    HttpResponse::Ok().body(format!("delete the message {}", id))
-}

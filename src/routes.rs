@@ -80,11 +80,5 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         
         // ======================== Backoffice API ======================= //
         .route("/inbox/pending", web::get().to(pending))
-        .route("/inbox/{id}", web::get().to(get_message_by_id))
-
-        .route("/inbox/{id}/assign", web::post().to(assign))
-        .route("/inbox/{id}/release", web::post().to(release))
-        .route("/inbox/{id}/reply", web::post().to(reply))
-
-        .route("/inbox/{id}", web::delete().to(delete));
+        .route("/inbox/{id}", web::get().to(get_message_by_id));
 }
